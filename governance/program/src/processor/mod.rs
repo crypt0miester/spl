@@ -32,6 +32,7 @@ mod process_set_token_owner_record_lock;
 mod process_sign_off_proposal;
 mod process_update_program_metadata;
 mod process_withdraw_governing_tokens;
+mod process_expire_proposal;
 
 use {
     crate::{error::GovernanceError, instruction::GovernanceInstruction},
@@ -62,6 +63,7 @@ use {
     process_set_realm_config_item::*,
     process_set_token_owner_record_lock::*,
     process_sign_off_proposal::*,
+    process_expire_proposal::*,
     process_update_program_metadata::*,
     process_withdraw_governing_tokens::*,
     solana_program::{
@@ -221,6 +223,9 @@ pub fn process_instruction(
 
         GovernanceInstruction::SetRealmConfigItem { args } => {
             process_set_realm_config_item(program_id, accounts, args)
+        }
+        GovernanceInstruction::ExpireProposal => {
+            process_expire_proposal(program_id, accounts)
         }
     }
 }
