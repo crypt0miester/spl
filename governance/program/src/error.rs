@@ -548,6 +548,10 @@ pub enum GovernanceError {
     /// TokenOwnerRecordLockAuthority not found
     #[error("TokenOwnerRecordLockAuthority not found")]
     TokenOwnerRecordLockAuthorityNotFound, // 631
+
+    /// Unexpected Transaction index, Transactions must be executed in sequence.
+    #[error("Unexpected transaction index, transactions must be executed in sequence")]
+    UnexpectedTransactionIndex, // 632
 }
 
 impl PrintProgramError for GovernanceError {

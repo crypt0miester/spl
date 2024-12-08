@@ -777,3 +777,210 @@ async fn test_execute_transaction_with_create_proposal_and_execute_in_single_slo
         GovernanceError::CannotExecuteTransactionWithinHoldUpTime.into()
     );
 }
+
+#[tokio::test]
+async fn test_execute_transfer_sol_multiple_transactions() {
+    // Arrange
+    let mut governance_test = GovernanceProgramTest::start_new().await;
+
+    let realm_cookie = governance_test.with_realm().await;
+
+    let token_owner_record_cookie = governance_test
+        .with_community_token_deposit(&realm_cookie)
+        .await
+        .unwrap();
+
+    let mut governance_cookie = governance_test
+        .with_governance(&realm_cookie, &token_owner_record_cookie)
+        .await
+        .unwrap();
+
+    governance_test
+        .with_native_treasury(&governance_cookie)
+        .await;
+    let mut proposal_cookie = governance_test
+        .with_proposal(&token_owner_record_cookie, &mut governance_cookie)
+        .await
+        .unwrap();
+
+    let signatory_record_cookie = governance_test
+        .with_signatory(
+            &proposal_cookie,
+            &governance_cookie,
+            &token_owner_record_cookie,
+        )
+        .await
+        .unwrap();
+
+    let wallet_cookie = governance_test.bench.with_wallet().await;
+    let transfer_amount = 100;
+
+    let proposal_transaction_cookie = governance_test
+        .with_native_transfer_transaction(
+            &governance_cookie,
+            &mut proposal_cookie,
+            &token_owner_record_cookie,
+            &wallet_cookie,
+            transfer_amount,
+        )
+        .await
+        .unwrap();
+
+    let second_proposal_transaction_cookie = governance_test
+        .with_native_transfer_transaction(
+            &governance_cookie,
+            &mut proposal_cookie,
+            &token_owner_record_cookie,
+            &wallet_cookie,
+            transfer_amount,
+        )
+        .await
+        .unwrap();
+
+    let third_proposal_transaction_cookie = governance_test
+        .with_native_transfer_transaction(
+            &governance_cookie,
+            &mut proposal_cookie,
+            &token_owner_record_cookie,
+            &wallet_cookie,
+            transfer_amount,
+        )
+        .await
+        .unwrap();
+
+    governance_test
+        .sign_off_proposal(&proposal_cookie, &signatory_record_cookie)
+        .await
+        .unwrap();
+
+    governance_test
+        .with_cast_yes_no_vote(&proposal_cookie, &token_owner_record_cookie, YesNoVote::Yes)
+        .await
+        .unwrap();
+
+    // Advance timestamp past hold_up_time
+    governance_test
+        .advance_clock_by_min_timespan(
+            governance_cookie.account.config.transactions_hold_up_time as u64,
+        )
+        .await;
+
+    let clock = governance_test.bench.get_clock().await;
+
+    // Act
+    governance_test
+        .execute_proposal_transaction(&proposal_cookie, &proposal_transaction_cookie)
+        .await
+        .unwrap();
+
+    governance_test
+        .execute_proposal_transaction(&proposal_cookie, &second_proposal_transaction_cookie)
+        .await
+        .unwrap();
+
+    governance_test
+        .execute_proposal_transaction(&proposal_cookie, &third_proposal_transaction_cookie)
+        .await
+        .unwrap();
+
+    // Assert
+
+    let proposal_account = governance_test
+        .get_proposal_account(&proposal_cookie.address)
+        .await;
+
+    let yes_option = proposal_account.options.first().unwrap();
+
+    assert_eq!(3, yes_option.transactions_executed_count);
+    assert_eq!(ProposalState::Completed, proposal_account.state);
+    assert_eq!(Some(clock.unix_timestamp), proposal_account.closed_at);
+    assert_eq!(Some(clock.unix_timestamp), proposal_account.executing_at);
+}
+
+#[tokio::test]
+async fn test_execute_transfer_sol_multiple_transactions_not_in_sequence_err() {
+    // Arrange
+    let mut governance_test = GovernanceProgramTest::start_new().await;
+
+    let realm_cookie = governance_test.with_realm().await;
+
+    let token_owner_record_cookie = governance_test
+        .with_community_token_deposit(&realm_cookie)
+        .await
+        .unwrap();
+
+    let mut governance_cookie = governance_test
+        .with_governance(&realm_cookie, &token_owner_record_cookie)
+        .await
+        .unwrap();
+
+    governance_test
+        .with_native_treasury(&governance_cookie)
+        .await;
+
+    let mut proposal_cookie = governance_test
+        .with_proposal(&token_owner_record_cookie, &mut governance_cookie)
+        .await
+        .unwrap();
+
+    let signatory_record_cookie = governance_test
+        .with_signatory(
+            &proposal_cookie,
+            &governance_cookie,
+            &token_owner_record_cookie,
+        )
+        .await
+        .unwrap();
+
+    let wallet_cookie = governance_test.bench.with_wallet().await;
+    let transfer_amount = 100;
+
+    let _proposal_transaction_cookie = governance_test
+        .with_native_transfer_transaction(
+            &governance_cookie,
+            &mut proposal_cookie,
+            &token_owner_record_cookie,
+            &wallet_cookie,
+            transfer_amount,
+        )
+        .await
+        .unwrap();
+
+    let second_proposal_transaction_cookie = governance_test
+        .with_native_transfer_transaction(
+            &governance_cookie,
+            &mut proposal_cookie,
+            &token_owner_record_cookie,
+            &wallet_cookie,
+            transfer_amount,
+        )
+        .await
+        .unwrap();
+
+    governance_test
+        .sign_off_proposal(&proposal_cookie, &signatory_record_cookie)
+        .await
+        .unwrap();
+
+    governance_test
+        .with_cast_yes_no_vote(&proposal_cookie, &token_owner_record_cookie, YesNoVote::Yes)
+        .await
+        .unwrap();
+
+    // Advance timestamp past hold_up_time
+    governance_test
+        .advance_clock_by_min_timespan(
+            governance_cookie.account.config.transactions_hold_up_time as u64,
+        )
+        .await;
+
+    // Act
+    let err = governance_test
+        .execute_proposal_transaction(&proposal_cookie, &second_proposal_transaction_cookie)
+        .await
+        .err()
+        .unwrap();
+
+    // Assert
+    assert_eq!(err, GovernanceError::UnexpectedTransactionIndex.into());
+}
