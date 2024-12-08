@@ -1,12 +1,15 @@
 //! Program state processor
 
 use {
-    crate::state::{
-        enums::{ProposalState, TransactionExecutionStatus},
-        governance::get_governance_data,
-        native_treasury::get_native_treasury_address_seeds,
-        proposal::{get_proposal_data_for_governance, OptionVoteResult},
-        proposal_transaction::get_proposal_transaction_data_for_proposal,
+    crate::{
+        error::GovernanceError,
+        state::{
+            enums::{ProposalState, TransactionExecutionStatus},
+            governance::get_governance_data,
+            native_treasury::get_native_treasury_address_seeds,
+            proposal::{get_proposal_data_for_governance, OptionVoteResult},
+            proposal_transaction::get_proposal_transaction_data_for_proposal,
+        },
     },
     solana_program::{
         account_info::{next_account_info, AccountInfo},
@@ -93,9 +96,24 @@ pub fn process_execute_transaction(program_id: &Pubkey, accounts: &[AccountInfo]
     if proposal_data.state == ProposalState::Succeeded {
         proposal_data.executing_at = Some(clock.unix_timestamp);
         proposal_data.state = ProposalState::Executing;
-    }
+    }   
 
     let option = &mut proposal_data.options[proposal_transaction_data.option_index as usize];
+
+    // Validates the transaction index to ensure sequential execution
+    // 
+    // Background:
+    // - An option may have multiple proposal transactions
+    // - The transactions_executed_count increments sequentially for each transaction
+    // 
+    // Purpose of the check:
+    // - Prevents out-of-order transaction processing
+    // - Ensures transactions are executed in the expected sequential order
+    // - Fails if the transaction index is not consecutive with the previous transaction
+    if option.transactions_executed_count != proposal_transaction_data.transaction_index as u16 {
+        return Err(GovernanceError::UnexpectedTransactionIndex.into());
+    }
+
     option.transactions_executed_count = option.transactions_executed_count.checked_add(1).unwrap();
 
     // Checking for Executing and ExecutingWithErrors states because instruction can
