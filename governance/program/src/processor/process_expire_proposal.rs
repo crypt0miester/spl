@@ -15,6 +15,10 @@ use {
 };
 
 /// Processes ExpireProposal instruction
+/// Proposal expiration is triggered after 7 days, but only for proposals that have successfully passed.
+/// The expiration countdown begins exclusively after the proposal's voting time has ended.
+/// Proposals exceeding this 7-day validity period can be marked as expired.
+/// This expiration rule encompasses fully, partially executed, and executing with error proposals.
 pub fn process_expire_proposal(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
     let account_info_iter = &mut accounts.iter();
 
