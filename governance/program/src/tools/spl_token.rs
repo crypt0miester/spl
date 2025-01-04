@@ -132,7 +132,10 @@ pub fn transfer_spl_tokens<'a>(
     spl_token_info: &AccountInfo<'a>,
 ) -> ProgramResult {
     let spl_token_program_id = spl_token_info.key;
-    // for previous instruction compatibility we do not use transfer_checked() here.
+    
+    // Maintain backwards compatibility
+    // spl_token_2022::instruction::transfer() is a replica of spl_token::instruction::transfer()
+    // if spl_token program_id is used, it would cpi to spl_token program.
     #[allow(deprecated)]
     let transfer_instruction = spl_token_2022::instruction::transfer(
         spl_token_program_id,

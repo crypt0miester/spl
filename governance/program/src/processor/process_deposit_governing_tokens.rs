@@ -84,7 +84,9 @@ pub fn process_deposit_governing_tokens(
                 )?;
             }
             _ => {
-                // included for backwards compatibility
+                // Maintain backwards compatibility
+                // Token-2022 requires transfer_checked method with mint
+                // Downstream the instruction will fail if the data supplied is invalid
                 transfer_spl_tokens(
                     governing_token_source_info,
                     governing_token_holding_info,
